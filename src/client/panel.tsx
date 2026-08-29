@@ -248,22 +248,31 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
     }
   }, [form])
 
+  const label = t('action.label')
+  const dotClassSum = snapshot ? dotClass(snapshot.trae) || dotClass(snapshot.workbuddy) : ''
   const trigger = wide
     ? (
-        <button type="button" className="dshpc-action" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <button
+          type="button"
+          className="dshpc-action dshpc-wide"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-label={label}
+          title={label}
+        >
           <CoinIcon />
-          <span>{t('action.label')}</span>
-          <span className={`dshpc-dot${snapshot ? dotClass(snapshot.trae) || dotClass(snapshot.workbuddy) : ''}`} />
+          <span className="dshpc-label">{label}</span>
+          <span className={`dshpc-dot${dotClassSum}`} />
         </button>
       )
     : (
         <button
           type="button"
-          className="dshpc-action"
+          className="dshpc-action dshpc-rail"
           onClick={() => setOpen(!open)}
           aria-expanded={open}
-          aria-label={t('action.iconLabel')}
-          title={t('action.iconLabel')}
+          aria-label={label}
+          title={label}
         >
           <CoinIcon />
         </button>

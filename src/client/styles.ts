@@ -12,11 +12,26 @@ export function ensureStyles(): void {
   style.id = STYLE_ID
   style.textContent = `
 .dshpc-action {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  border: 0; background: transparent; color: CanvasText; cursor: pointer;
-  font: inherit; padding: 6px 10px; border-radius: 6px; text-align: left;
+  box-sizing: border-box; cursor: pointer; flex: 0 1 auto; min-width: 0;
+  height: 42px; color: var(--dsw-alias-label-primary, CanvasText);
+  background: transparent; border: none; border-radius: 12px;
+  align-items: center; gap: 8px; margin: 4px -2px; padding: 0 10px 0 8px;
+  font-family: inherit; font-size: 14px; line-height: 22px;
+  display: flex; overflow: hidden; text-align: left;
 }
-.dshpc-action:hover { background: color-mix(in srgb, CanvasText 8%, transparent); }
+.dshpc-action:hover { background: var(--dsw-alias-interactive-bg-hover, color-mix(in srgb, CanvasText 8%, transparent)); }
+.dshpc-action.dshpc-rail {
+  border-radius: 50%; justify-content: center; gap: 0; flex: 0 0 auto;
+  width: 36px; height: 36px; margin: 8px 0 10px; padding: 0;
+}
+.dshpc-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The footer-action seat is a nowrap flex row, but its entries are full-width
+   rows by design (the memory trigger spans calc(100% + 4px)). When our entry
+   shares the seat, let the row wrap so each entry keeps its own full-width
+   line. The hashed class mirrors the rc.2 sidebar build; the attribute
+   selector is the fallback if the hash changes. */
+[class*='footerActions']:has(.dshpc-action) { flex-wrap: wrap; }
+.dshpc-action.dshpc-wide { width: calc(100% + 4px); }
 .dshpc-icon { width: 16px; height: 16px; flex: none; }
 .dshpc-dot { width: 7px; height: 7px; border-radius: 999px; flex: none; background: color-mix(in srgb, CanvasText 30%, transparent); }
 .dshpc-dot.ok { background: #34a853; }
