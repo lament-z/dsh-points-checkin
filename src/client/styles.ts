@@ -41,7 +41,7 @@ export function ensureStyles(): void {
   position: fixed; inset: 0; z-index: 60; background: transparent;
 }
 .dshpc-card {
-  position: fixed; z-index: 61; width: 340px; overflow: auto;
+  position: fixed; z-index: 61; width: 340px; overflow: auto; box-sizing: border-box;
   background: Canvas; color: CanvasText; border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
   border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 14px;
   font: 13px/1.5 system-ui, sans-serif;
