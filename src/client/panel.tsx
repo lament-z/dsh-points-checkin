@@ -184,9 +184,40 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   const [form, setForm] = useState<SettingsForm>({ traeToken: '', traeDevice: '', wbToken: '', wbUser: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const cardRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const [cardPos, setCardPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null)
 
   useEffect(() => ensureStyles(), [])
+
+  // Anchor the card to the trigger: open to the right of the button (or to
+  // the left when that would leave the viewport), top aligned with it and
+  // clamped so the card never leaves the screen.
+  const updateCardPos = useCallback(() => {
+    const el = triggerRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const width = 340
+    let left = rect.right + 10
+    if (left + width > window.innerWidth - 8) {
+      left = Math.max(8, rect.left - width - 10)
+    }
+    const top = Math.max(8, Math.min(rect.top - 6, window.innerHeight - 120))
+    setCardPos({ left, top, maxHeight: window.innerHeight - top - 12 })
+  }, [])
+
+  const toggleOpen = useCallback(() => {
+    setOpen((current) => {
+      if (!current) updateCardPos()
+      return !current
+    })
+  }, [updateCardPos])
+
+  useEffect(() => {
+    if (!open) return
+    const onResize = (): void => updateCardPos()
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [open, updateCardPos])
 
   const loadState = useCallback(async (refresh = false) => {
     try {
@@ -253,9 +284,10 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   const trigger = wide
     ? (
         <button
+          ref={triggerRef}
           type="button"
           className="dshpc-action dshpc-wide"
-          onClick={() => setOpen(!open)}
+          onClick={toggleOpen}
           aria-expanded={open}
           aria-label={label}
           title={label}
@@ -267,9 +299,10 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
       )
     : (
         <button
+          ref={triggerRef}
           type="button"
           className="dshpc-action dshpc-rail"
-          onClick={() => setOpen(!open)}
+          onClick={toggleOpen}
           aria-expanded={open}
           aria-label={label}
           title={label}
@@ -281,10 +314,15 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   return (
     <>
       {trigger}
-      {open && createPortal(
+      {open && cardPos && createPortal(
         <>
-          <div className="dshpc-overlay" onClick={() => setOpen(false)} />
-          <div className="dshpc-card" ref={cardRef} role="dialog" aria-label={t('panel.title')}>
+          <div className="dshpc-overlay" onClick={toggleOpen} />
+          <div
+            className="dshpc-card"
+            role="dialog"
+            aria-label={t('panel.title')}
+            style={{ left: cardPos.left, top: cardPos.top, maxHeight: cardPos.maxHeight }}
+          >
             <h2 className="dshpc-title">{t('panel.title')}</h2>
             {unreachable && <p className="dshpc-error">{t('panel.unreachable')}</p>}
             {!snapshot && !unreachable && <p className="dshpc-muted">{t('panel.loading')}</p>}

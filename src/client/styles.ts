@@ -41,12 +41,16 @@ export function ensureStyles(): void {
   position: fixed; inset: 0; z-index: 60; background: transparent;
 }
 .dshpc-card {
-  position: fixed; z-index: 61; left: 64px; top: 56px; width: 340px;
-  max-height: calc(100vh - 80px); overflow: auto;
+  position: fixed; z-index: 61; width: 340px; overflow: auto;
   background: Canvas; color: CanvasText; border: 1px solid color-mix(in srgb, CanvasText 15%, transparent);
   border-radius: 12px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 14px;
   font: 13px/1.5 system-ui, sans-serif;
+  transform-origin: top left; animation: dshpc-pop .16s ease-out;
 }
+@keyframes dshpc-pop {
+  from { opacity: 0; transform: translateX(-6px) scale(.98); }
+}
+@media (prefers-reduced-motion: reduce) { .dshpc-card { animation: none; } }
 .dshpc-title { font-size: 13px; font-weight: 600; margin: 0 0 10px; }
 .dshpc-service { border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent); padding: 10px 0; }
 .dshpc-service:first-of-type { border-top: 0; padding-top: 2px; }
