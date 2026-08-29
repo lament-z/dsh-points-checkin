@@ -112,11 +112,12 @@ function SettingsSection(
     form: SettingsForm
     saving: boolean
     saved: boolean
+    workbuddyAuto: boolean
     onChange: (patch: Partial<SettingsForm>) => void
     onSave: () => void
   } & PropsLocale<'points-checkin'>,
 ): React.ReactElement | null {
-  const { open, form, saving, saved, onChange, onSave, t } = props
+  const { open, form, saving, saved, workbuddyAuto, onChange, onSave, t } = props
   if (!open) return null
   return (
     <div className="dshpc-settings">
@@ -154,6 +155,7 @@ function SettingsSection(
           value={form.wbToken}
           onChange={(event) => onChange({ wbToken: event.target.value })}
         />
+        {workbuddyAuto && <p className="dshpc-hint">{t('settings.wbAuto')}</p>}
       </div>
       <div className="dshpc-field">
         <label htmlFor="dshpc-wb-user">{t('settings.wbUser')}</label>
@@ -347,6 +349,7 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
               form={form}
               saving={saving}
               saved={saved}
+              workbuddyAuto={snapshot?.workbuddy.credentialSource === 'desktop' || snapshot?.workbuddy.credentialSource === 'plugin-copy'}
               onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
               onSave={() => void doSave()}
               t={t}

@@ -30,6 +30,7 @@ export declare const zh: {
     'settings.traeToken': string;
     'settings.traeDevice': string;
     'settings.wbToken': string;
+    'settings.wbAuto': string;
     'settings.wbUser': string;
     'settings.save': string;
     'settings.saving': string;

@@ -20,6 +20,8 @@ export interface ServiceSnapshot {
   points: number | null
   pointsRaw?: unknown
   lastCheckin: string | null
+  /** WorkBuddy only: where the credential came from. */
+  credentialSource?: 'desktop' | 'plugin-copy' | 'manual'
   error?: 'auth' | 'network' | 'protocol' | 'business'
   errorMessage?: string
 }
