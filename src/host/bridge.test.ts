@@ -24,6 +24,7 @@ function fakeApis(): ApiAdapters {
   return {
     trae: {
       status: vi.fn(async () => ({ enable: true, checkedIn: false, credits: 7 })),
+      entitlements: vi.fn(async () => ({ remaining: 7, totalAmount: 10, consumedAmount: 3 })),
       claim: vi.fn(async () => undefined),
     },
     workbuddy: {
@@ -37,7 +38,7 @@ function fakeApis(): ApiAdapters {
 }
 
 async function startWith(orch: CheckinOrchestrator): Promise<Bridge> {
-  const started = await startBridge(orch, () => {})
+  const started = await startBridge(orch, () => {}, [28082, 28083, 28084])
   if (!started) throw new Error('bridge failed to start in test')
   bridge = started
   return started

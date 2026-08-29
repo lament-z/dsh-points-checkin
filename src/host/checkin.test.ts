@@ -25,6 +25,7 @@ function fakeApis(): ApiAdapters {
   return {
     trae: {
       status: vi.fn(async () => ({ enable: true, checkedIn: false, credits: 120 })),
+      entitlements: vi.fn(async () => ({ remaining: 3182.4, totalAmount: 10100, consumedAmount: 6917.6 })),
       claim: vi.fn(async () => undefined),
     },
     workbuddy: {
@@ -63,7 +64,7 @@ describe('CheckinOrchestrator', () => {
     const snap = await orch.snapshot(true)
     expect(snap.trae.configured).toBe(true)
     expect(snap.trae.checkedIn).toBe(false)
-    expect(snap.trae.points).toBe(120)
+    expect(snap.trae.points).toBe(3182.4)
     expect(snap.workbuddy.configured).toBe(true)
     expect(snap.workbuddy.points).toBe(3)
     expect(apis.trae.status).toHaveBeenCalledWith('tok', '')

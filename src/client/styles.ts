@@ -67,6 +67,7 @@ export function ensureStyles(): void {
 }
 .dshpc-button:disabled { opacity: .55; cursor: default; }
 .dshpc-button.primary { background: CanvasText; color: Canvas; }
+.dshpc-done { color: #2e7d32; font-weight: 600; font-size: 13px; }
 .dshpc-error { color: #d93025; margin-top: 6px; font-size: 12px; }
 .dshpc-muted { color: color-mix(in srgb, CanvasText 55%, Canvas); }
 .dshpc-settings { margin-top: 10px; border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent); padding-top: 10px; }

@@ -79,15 +79,19 @@ function ServiceCard(
       </div>
       {service.errorMessage && <div className="dshpc-error">{t('error.prefix')}: {service.errorMessage}</div>}
       <div className="dshpc-row">
-        <button
-          type="button"
-          className="dshpc-button primary"
-          disabled={!canCheckin(service) || busy}
-          onClick={onCheckin}
-        >
-          {busy ? t('checkin.doing') : t('checkin.button')}
-        </button>
-        {service.lastCheckin && (
+        {service.checkedIn === true ? (
+          <span className="dshpc-done">{t('status.checkedIn')}</span>
+        ) : (
+          <button
+            type="button"
+            className="dshpc-button primary"
+            disabled={!canCheckin(service) || busy}
+            onClick={onCheckin}
+          >
+            {busy ? t('checkin.doing') : t('checkin.button')}
+          </button>
+        )}
+        {service.lastCheckin && service.checkedIn !== true && (
           <span className="dshpc-muted">{t('lastCheckin.label')}: {service.lastCheckin}</span>
         )}
       </div>

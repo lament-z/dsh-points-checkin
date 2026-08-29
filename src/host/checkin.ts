@@ -15,7 +15,6 @@ import {
   writeState,
   type Credentials,
 } from './store.ts'
-
 /** All services the plugin knows. */
 export type ServiceName = 'trae' | 'workbuddy'
 export const SERVICES: readonly ServiceName[] = ['trae', 'workbuddy'] as const
@@ -54,6 +53,7 @@ export interface Snapshot {
 export interface ApiAdapters {
   trae: {
     status: typeof trae.traeStatus
+    entitlements: typeof trae.traeEntitlements
     claim: typeof trae.traeClaim
   }
   workbuddy: {
@@ -69,7 +69,7 @@ export interface ApiAdapters {
 /** Default adapters over the real API clients. */
 export function defaultApis(): ApiAdapters {
   return {
-    trae: { status: trae.traeStatus, claim: trae.traeClaim },
+    trae: { status: trae.traeStatus, entitlements: trae.traeEntitlements, claim: trae.traeClaim },
     workbuddy: {
       resolve: (manualToken) => workbuddy.resolveStoredCredential(manualToken),
       status: workbuddy.workbuddyStatus,
@@ -192,7 +192,10 @@ export class CheckinOrchestrator {
       try {
         await this.probe(service, true)
         const runtime = this.runtime[service]
-        if (!runtime.credentials?.token) return
+        const configured = service === 'workbuddy'
+          ? Boolean(runtime.resolved || runtime.credentials?.token)
+          : Boolean(runtime.credentials?.token)
+        if (!configured) return
         if (runtime.checkinEnabled === false) return
         if (runtime.checkedIn) return
         await this.checkin(service)
@@ -224,7 +227,14 @@ export class CheckinOrchestrator {
       runtime.authOk = true
       runtime.checkinEnabled = status.enable
       runtime.checkedIn = status.checkedIn || claimedToday
-      runtime.points = status.credits ?? null
+      // The check-in wallet figure is not the account total; the ledger is.
+      try {
+        const ledger = await this.apis.trae.entitlements(runtime.credentials.token, runtime.credentials.deviceId ?? '')
+        runtime.points = ledger.remaining
+        runtime.pointsRaw = ledger
+      } catch {
+        runtime.points = status.credits ?? null
+      }
       runtime.error = undefined
       runtime.errorMessage = undefined
     } catch (cause) {

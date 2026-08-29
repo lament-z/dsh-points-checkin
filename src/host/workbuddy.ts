@@ -208,11 +208,19 @@ async function billingPost(
   if (res.status === 401 || res.status === 403) {
     throw new ApiError('auth', `workbuddy ${path} rejected the credential (HTTP ${res.status})`)
   }
-  if (!res.ok) throw new ApiError('network', `workbuddy ${path} returned HTTP ${res.status}`)
-  const envelope = await readEnvelope(res)
+  let envelope: { code?: number; data?: unknown; msg?: string } = {}
+  try {
+    envelope = (await res.json()) as { code?: number; data?: unknown; msg?: string }
+  } catch {
+    if (!res.ok) throw new ApiError('network', `workbuddy ${path} returned HTTP ${res.status}`)
+    throw new ApiError('protocol', `workbuddy ${path} returned a non-JSON body`)
+  }
+  // Business errors may ride on non-2xx statuses (e.g. HTTP 400 + code 10001
+  // for "already checked in today"); surface the code before the HTTP class.
   if (typeof envelope.code === 'number' && envelope.code !== 0) {
     throw new ApiError('business', `workbuddy ${path} business error ${envelope.code}: ${envelope.msg ?? ''}`, envelope.code)
   }
+  if (!res.ok) throw new ApiError('network', `workbuddy ${path} returned HTTP ${res.status}`)
   return envelope.data ?? envelope
 }
 

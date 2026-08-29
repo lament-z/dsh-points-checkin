@@ -36,6 +36,7 @@ export interface Snapshot {
 export interface ApiAdapters {
     trae: {
         status: typeof trae.traeStatus;
+        entitlements: typeof trae.traeEntitlements;
         claim: typeof trae.traeClaim;
     };
     workbuddy: {

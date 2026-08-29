@@ -10,4 +10,4 @@ export interface Bridge {
  * Start the bridge. Tries PORT_CANDIDATES in order; returns null when every
  * port is taken (the client panel will report "unreachable").
  */
-export declare function startBridge(orchestrator: CheckinOrchestrator, log: (message: string) => void): Promise<Bridge | null>;
+export declare function startBridge(orchestrator: CheckinOrchestrator, log: (message: string) => void, ports?: readonly number[]): Promise<Bridge | null>;

@@ -76,7 +76,11 @@ export interface Bridge {
  * Start the bridge. Tries PORT_CANDIDATES in order; returns null when every
  * port is taken (the client panel will report "unreachable").
  */
-export function startBridge(orchestrator: CheckinOrchestrator, log: (message: string) => void): Promise<Bridge | null> {
+export function startBridge(
+  orchestrator: CheckinOrchestrator,
+  log: (message: string) => void,
+  ports: readonly number[] = PORT_CANDIDATES,
+): Promise<Bridge | null> {
   return new Promise((resolve) => {
     let settled = false
     const finish = (bridge: Bridge | null): void => {
@@ -87,7 +91,7 @@ export function startBridge(orchestrator: CheckinOrchestrator, log: (message: st
     const server: Server = createServer((req, res) => {
       void handle(req, res, orchestrator, log)
     })
-    tryNext(server, 0, (port) => {
+    tryNext(server, 0, ports, (port) => {
       if (port === null) {
         log('bridge failed to bind any candidate port')
         finish(null)
@@ -99,15 +103,15 @@ export function startBridge(orchestrator: CheckinOrchestrator, log: (message: st
   })
 }
 
-function tryNext(server: Server, index: number, done: (port: number | null) => void): void {
-  if (index >= PORT_CANDIDATES.length) {
+function tryNext(server: Server, index: number, ports: readonly number[], done: (port: number | null) => void): void {
+  if (index >= ports.length) {
     done(null)
     return
   }
-  const port = PORT_CANDIDATES[index]
+  const port = ports[index]
   const onError = (): void => {
     server.removeListener('listening', onListening)
-    tryNext(server, index + 1, done)
+    tryNext(server, index + 1, ports, done)
   }
   const onListening = (): void => {
     server.removeListener('error', onError)
