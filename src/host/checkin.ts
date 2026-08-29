@@ -6,6 +6,7 @@
 import { ApiError } from './errors.ts'
 import * as trae from './trae.ts'
 import * as workbuddy from './workbuddy.ts'
+import type { WbCredential } from './workbuddy.ts'
 import {
   readCredentials,
   readState,
@@ -39,6 +40,8 @@ export interface ServiceSnapshot {
   error?: 'auth' | 'network' | 'protocol' | 'business'
   /** Human-readable error message of the last probe/claim. */
   errorMessage?: string
+  /** WorkBuddy only: where the credential came from (desktop file or manual). */
+  credentialSource?: 'desktop' | 'plugin-copy' | 'manual'
 }
 
 /** Full client-facing state. */
@@ -54,9 +57,12 @@ export interface ApiAdapters {
     claim: typeof trae.traeClaim
   }
   workbuddy: {
+    /** Resolve the effective credential (manual token wins; else desktop file + plugin copy). */
+    resolve: (manualToken?: string) => Promise<WbCredential | undefined>
     status: typeof workbuddy.workbuddyStatus
+    points: typeof workbuddy.workbuddyPoints
     claim: typeof workbuddy.workbuddyClaim
-    resource: typeof workbuddy.workbuddyResource
+    refresh: typeof workbuddy.workbuddyRefresh
   }
 }
 
@@ -65,9 +71,11 @@ export function defaultApis(): ApiAdapters {
   return {
     trae: { status: trae.traeStatus, claim: trae.traeClaim },
     workbuddy: {
+      resolve: (manualToken) => workbuddy.resolveStoredCredential(manualToken),
       status: workbuddy.workbuddyStatus,
+      points: workbuddy.workbuddyPoints,
       claim: workbuddy.workbuddyClaim,
-      resource: workbuddy.workbuddyResource,
+      refresh: workbuddy.workbuddyRefresh,
     },
   }
 }
@@ -77,6 +85,8 @@ const SNAPSHOT_TTL_MS = 30_000
 /** Per-service runtime view (credentials + last probe + last error). */
 interface RuntimeService {
   credentials: Credentials['trae'] & Credentials['workbuddy']
+  /** Last resolved WorkBuddy credential (workbuddy only). */
+  resolved?: WbCredential
   lastCheckin: string | null
   authOk: boolean | null
   checkedIn: boolean | null
@@ -151,11 +161,14 @@ export class CheckinOrchestrator {
   /** Claim today's reward for one service; records the date on success. */
   async checkin(service: ServiceName): Promise<void> {
     const runtime = this.runtime[service]
-    if (!runtime.credentials?.token) throw new ApiError('auth', `${service} is not configured`)
     if (service === 'trae') {
+      if (!runtime.credentials?.token) throw new ApiError('auth', 'trae is not configured')
       await this.apis.trae.claim(runtime.credentials.token, runtime.credentials.deviceId ?? '')
     } else {
-      await this.apis.workbuddy.claim(runtime.credentials)
+      const credential = runtime.resolved ?? await this.apis.workbuddy.resolve(runtime.credentials?.token)
+      if (!credential) throw new ApiError('auth', 'workbuddy is not configured (desktop app not signed in?)')
+      await this.apis.workbuddy.claim(credential)
+      runtime.resolved = credential
     }
     runtime.checkedIn = true
     runtime.lastCheckin = todayLocal()
@@ -196,47 +209,95 @@ export class CheckinOrchestrator {
 
   private async probe(service: ServiceName, force: boolean): Promise<void> {
     const runtime = this.runtime[service]
-    if (!runtime.credentials?.token) return
-    const fresh = Date.now() - runtime.probedAt < SNAPSHOT_TTL_MS
-    if (fresh && !force) return
     // A claim that already succeeded today is authoritative even when a
     // follow-up status probe still reports unchecked (upstream lag).
     const claimedToday = runtime.lastCheckin === todayLocal()
+    if (service === 'workbuddy') {
+      await this.probeWorkbuddy(runtime, force, claimedToday)
+      return
+    }
+    if (!runtime.credentials?.token) return
+    const fresh = Date.now() - runtime.probedAt < SNAPSHOT_TTL_MS
+    if (fresh && !force) return
     try {
-      if (service === 'trae') {
-        const status = await this.apis.trae.status(runtime.credentials.token, runtime.credentials.deviceId ?? '')
-        runtime.authOk = true
-        runtime.checkinEnabled = status.enable
-        runtime.checkedIn = status.checkedIn || claimedToday
-        runtime.points = status.credits ?? null
-      } else {
-        const status = await this.apis.workbuddy.status(runtime.credentials)
-        runtime.authOk = true
-        runtime.checkedIn = status.checkedIn || claimedToday
-        runtime.points = status.points ?? null
-        try {
-          runtime.pointsRaw = await this.apis.workbuddy.resource(runtime.credentials)
-        } catch {
-          // Resource query is best-effort; status remains authoritative.
-        }
-      }
+      const status = await this.apis.trae.status(runtime.credentials.token, runtime.credentials.deviceId ?? '')
+      runtime.authOk = true
+      runtime.checkinEnabled = status.enable
+      runtime.checkedIn = status.checkedIn || claimedToday
+      runtime.points = status.credits ?? null
       runtime.error = undefined
       runtime.errorMessage = undefined
     } catch (cause) {
-      const apiError = cause instanceof ApiError ? cause : undefined
-      runtime.authOk = apiError?.kind === 'auth' ? false : runtime.authOk
-      runtime.error = apiError?.kind ?? 'network'
-      runtime.errorMessage = cause instanceof Error ? cause.message : String(cause)
+      this.recordError(runtime, cause)
     } finally {
       runtime.probedAt = Date.now()
     }
+  }
+
+  private async probeWorkbuddy(runtime: RuntimeService, force: boolean, claimedToday: boolean): Promise<void> {
+    const fresh = Date.now() - runtime.probedAt < SNAPSHOT_TTL_MS
+    if (fresh && !force) return
+    let credential: WbCredential | undefined
+    try {
+      credential = (runtime.authOk === true && runtime.resolved) || await this.apis.workbuddy.resolve(runtime.credentials?.token)
+      if (!credential) {
+        runtime.authOk = null
+        return
+      }
+      // Refresh happens on explicit auth rejection below; expiry timestamps
+      // alone are not authoritative (the desktop app may have refreshed).
+      let active = credential
+      try {
+        const [status, accounts] = await Promise.all([
+          this.apis.workbuddy.status(active),
+          this.apis.workbuddy.points(active),
+        ])
+        runtime.authOk = true
+        runtime.checkedIn = (status.checkedIn ?? false) || claimedToday
+        runtime.points = accounts.reduce((sum, entry) => sum + entry.remain, 0)
+        runtime.pointsRaw = accounts
+        runtime.error = undefined
+        runtime.errorMessage = undefined
+      } catch (cause) {
+        if (cause instanceof ApiError && cause.kind === 'auth' && active.refreshToken !== '') {
+          active = await this.apis.workbuddy.refresh(active)
+          const [status, accounts] = await Promise.all([
+            this.apis.workbuddy.status(active),
+            this.apis.workbuddy.points(active),
+          ])
+          runtime.authOk = true
+          runtime.checkedIn = (status.checkedIn ?? false) || claimedToday
+          runtime.points = accounts.reduce((sum, entry) => sum + entry.remain, 0)
+          runtime.pointsRaw = accounts
+          runtime.error = undefined
+          runtime.errorMessage = undefined
+        } else {
+          throw cause
+        }
+      }
+      runtime.resolved = active
+    } catch (cause) {
+      this.recordError(runtime, cause)
+      if (cause instanceof ApiError && cause.kind === 'auth') runtime.authOk = false
+    } finally {
+      runtime.probedAt = Date.now()
+    }
+  }
+
+  private recordError(runtime: RuntimeService, cause: unknown): void {
+    const apiError = cause instanceof ApiError ? cause : undefined
+    runtime.authOk = apiError?.kind === 'auth' ? false : runtime.authOk
+    runtime.error = apiError?.kind ?? 'network'
+    runtime.errorMessage = cause instanceof Error ? cause.message : String(cause)
   }
 
   private toSnapshot(service: ServiceName): ServiceSnapshot {
     const runtime = this.runtime[service]
     return {
       service,
-      configured: Boolean(runtime.credentials?.token),
+      configured: service === 'workbuddy'
+        ? Boolean(runtime.resolved || runtime.credentials?.token)
+        : Boolean(runtime.credentials?.token),
       authOk: runtime.authOk,
       checkedIn: runtime.checkedIn,
       checkinEnabled: runtime.checkinEnabled,
@@ -245,6 +306,7 @@ export class CheckinOrchestrator {
       lastCheckin: runtime.lastCheckin,
       error: runtime.error,
       errorMessage: runtime.errorMessage,
+      ...(service === 'workbuddy' && runtime.resolved ? { credentialSource: runtime.resolved.source } : {}),
     }
   }
 

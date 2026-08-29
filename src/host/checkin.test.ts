@@ -17,6 +17,10 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
+function fakeWorkbuddyCredential() {
+  return { accessToken: 'wb', refreshToken: 'r', expiresAtMs: 0, uid: 'u1', domain: '', source: 'manual' as const }
+}
+
 function fakeApis(): ApiAdapters {
   return {
     trae: {
@@ -24,19 +28,32 @@ function fakeApis(): ApiAdapters {
       claim: vi.fn(async () => undefined),
     },
     workbuddy: {
-      status: vi.fn(async () => ({ checkedIn: false })),
+      resolve: vi.fn(async () => fakeWorkbuddyCredential()),
+      status: vi.fn(async () => ({ checkedIn: false, points: null, accounts: [] })),
+      points: vi.fn(async () => [{ packageName: 'Pro', remain: 3, size: 10 }]),
       claim: vi.fn(async () => undefined),
-      resource: vi.fn(async () => ({ list: [], total: 3 })),
+      refresh: vi.fn(async (c) => c),
     },
   }
 }
 
 describe('CheckinOrchestrator', () => {
   it('reports unconfigured services', async () => {
-    const orch = new CheckinOrchestrator(fakeApis())
+    const apis = fakeApis()
+    ;(apis.workbuddy.resolve as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+    const orch = new CheckinOrchestrator(apis)
     const snap = await orch.snapshot(true)
     expect(snap.trae.configured).toBe(false)
     expect(snap.workbuddy.configured).toBe(false)
+  })
+
+  it('discovers workbuddy credentials without manual configuration', async () => {
+    const apis = fakeApis()
+    const orch = new CheckinOrchestrator(apis)
+    const snap = await orch.snapshot(true)
+    expect(snap.workbuddy.configured).toBe(true)
+    expect(snap.workbuddy.points).toBe(3)
+    expect(apis.workbuddy.resolve).toHaveBeenCalledWith(undefined)
   })
 
   it('stores credentials and probes the status', async () => {
@@ -48,8 +65,18 @@ describe('CheckinOrchestrator', () => {
     expect(snap.trae.checkedIn).toBe(false)
     expect(snap.trae.points).toBe(120)
     expect(snap.workbuddy.configured).toBe(true)
+    expect(snap.workbuddy.points).toBe(3)
     expect(apis.trae.status).toHaveBeenCalledWith('tok', '')
-    expect(apis.workbuddy.status).toHaveBeenCalledWith({ token: 'wb', userId: 'u1' })
+    expect(apis.workbuddy.resolve).toHaveBeenCalledWith('wb')
+  })
+
+  it('marks workbuddy unconfigured when no credential resolves', async () => {
+    const apis = fakeApis()
+    ;(apis.workbuddy.resolve as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+    const orch = new CheckinOrchestrator(apis)
+    const snap = await orch.snapshot(true)
+    expect(snap.workbuddy.configured).toBe(false)
+    expect(snap.workbuddy.authOk).toBeNull()
   })
 
   it('claims and records the local date', async () => {
@@ -84,7 +111,7 @@ describe('CheckinOrchestrator', () => {
   it('ensureToday skips disabled campaigns and never throws on failures', async () => {
     const apis = fakeApis()
     ;(apis.trae.status as ReturnType<typeof vi.fn>).mockResolvedValue({ enable: false, checkedIn: false, credits: 0 })
-    ;(apis.workbuddy.status as ReturnType<typeof vi.fn>).mockRejectedValue(new ApiError('network', 'down'))
+    ;(apis.workbuddy.points as ReturnType<typeof vi.fn>).mockRejectedValue(new ApiError('network', 'down'))
     const orch = new CheckinOrchestrator(apis)
     await orch.setCredentials({ trae: { token: 'tok' }, workbuddy: { token: 'wb' } })
     await expect(orch.ensureToday()).resolves.toBeUndefined()

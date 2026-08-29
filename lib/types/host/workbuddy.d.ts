@@ -1,27 +1,47 @@
 import type { FetchFn } from './trae.ts';
-/** Meter base (spec open item 1: confirm against a live capture). */
-export declare const WORKBUDDY_BASE = "https://www.codebuddy.cn";
-export interface WorkbuddyHeaders {
-    token: string;
-    userId?: string;
+/** Desktop auth file candidates (probe order; mirrors dsh-workbuddy-connect). */
+export declare function desktopAuthCandidates(): string[];
+/** Resolved WorkBuddy credential. */
+export interface WbCredential {
+    accessToken: string;
+    refreshToken: string;
+    expiresAtMs: number;
+    refreshExpiresAtMs?: number;
+    uid: string;
+    enterpriseId?: string;
+    domain: string;
+    /** Where the credential came from (panel display only). */
+    source: 'desktop' | 'plugin-copy' | 'manual';
 }
-/**
- * Query the daily check-in status. The data envelope is opaque to static
- * analysis, so the parser below accepts both a direct boolean and common
- * wrapper shapes; unknown shapes surface as a protocol error.
- */
+/** Parse the desktop document in either shape (nested auth/account or flat). */
+export declare function parseDesktopAuth(text: string): WbCredential | undefined;
+/** Best available credential: manual token, else plugin copy vs desktop file. */
+export declare function resolveStoredCredential(manualToken?: string): Promise<WbCredential | undefined>;
+/** Persist a refreshed credential into the plugin-owned copy. */
+export declare function persistRefreshedCredential(credential: WbCredential): Promise<void>;
+export declare function billingHeaders(credential: WbCredential): Record<string, string>;
 export interface WorkbuddyStatus {
-    checkedIn: boolean;
-    /** Present when the status payload carries a balance the parser recognizes. */
-    points?: number;
+    checkedIn: boolean | null;
+    /** Aggregated remaining credit across the account's packages. */
+    points: number | null;
+    /** Per-package breakdown (packageName + remain). */
+    accounts: Array<{
+        packageName: string;
+        remain: number;
+        size: number;
+    }>;
 }
-/** Query the daily check-in status for the configured account. */
-export declare function workbuddyStatus(account: WorkbuddyHeaders, fetchFn?: FetchFn): Promise<WorkbuddyStatus>;
-/** Claim today's check-in reward. */
-export declare function workbuddyClaim(account: WorkbuddyHeaders, fetchFn?: FetchFn): Promise<void>;
+/** Sum remaining credit across packages, per the official client's algorithm. */
+export declare function parseAccounts(data: unknown): WorkbuddyStatus['accounts'];
+/** Query the aggregated remaining credit (and package breakdown). */
+export declare function workbuddyPoints(credential: WbCredential, fetchFn?: FetchFn): Promise<WorkbuddyStatus['accounts']>;
 /**
- * Query the plan/resource snapshot (spec: get-user-resource with the
- * p_tcaca product code). The exact balance field is an open item; the raw
- * data is surfaced to the client for display heuristics.
+ * Query the daily check-in status. The check-in endpoints are known only in
+ * the web-console shape (no /v2 evidence exists), so only the bare path is
+ * tried; an unknown data shape surfaces as null rather than an error.
  */
-export declare function workbuddyResource(account: WorkbuddyHeaders, fetchFn?: FetchFn): Promise<unknown>;
+export declare function workbuddyStatus(credential: WbCredential, fetchFn?: FetchFn): Promise<WorkbuddyStatus>;
+/** Claim today's check-in reward; an already-claimed day counts as success. */
+export declare function workbuddyClaim(credential: WbCredential, fetchFn?: FetchFn): Promise<void>;
+/** Exchange the refresh token for a fresh access token. */
+export declare function workbuddyRefresh(credential: WbCredential, fetchFn?: FetchFn): Promise<WbCredential>;

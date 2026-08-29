@@ -17,9 +17,12 @@ export interface TraeCredentials {
 
 /** Credential material for the WorkBuddy (CodeBuddy) meter API. */
 export interface WorkbuddyCredentials {
-  /** Bearer token captured from the web console or client traffic. */
+  /**
+   * Bearer JWT from the desktop client, OR the web console's HttpOnly
+   * `session` cookie value (routing decided in workbuddyRequestHeaders).
+   */
   token: string
-  /** Optional X-User-Id header value injected alongside the bearer token. */
+  /** Optional X-User-Id header value injected alongside the auth material. */
   userId?: string
 }
 

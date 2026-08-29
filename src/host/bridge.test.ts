@@ -27,9 +27,11 @@ function fakeApis(): ApiAdapters {
       claim: vi.fn(async () => undefined),
     },
     workbuddy: {
-      status: vi.fn(async () => ({ checkedIn: false })),
+      resolve: vi.fn(async () => ({ accessToken: 'wb', refreshToken: 'r', expiresAtMs: 0, uid: '', domain: '', source: 'manual' as const })),
+      status: vi.fn(async () => ({ checkedIn: false, points: null, accounts: [] })),
+      points: vi.fn(async () => [{ packageName: 'Pro', remain: 7, size: 10 }]),
       claim: vi.fn(async () => undefined),
-      resource: vi.fn(async () => ({})),
+      refresh: vi.fn(async (c) => c),
     },
   }
 }
