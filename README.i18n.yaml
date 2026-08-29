@@ -1,0 +1,10 @@
+# Pairing record for the plugin README (docs/i18n.md contract).
+source: README.md
+target: README.zh.md
+sections:
+  - title
+  - intro
+  - requirements
+  - install
+  - notes
+  - license

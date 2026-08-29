@@ -1,0 +1,256 @@
+/**
+ * Check-in orchestrator: a per-service snapshot for the client panel, manual
+ * claim, and the startup catch-up (ensureToday) that claims any configured
+ * service whose local date has not been checked in yet.
+ */
+import { ApiError } from './errors.ts'
+import * as trae from './trae.ts'
+import * as workbuddy from './workbuddy.ts'
+import {
+  readCredentials,
+  readState,
+  todayLocal,
+  writeCredentials,
+  writeState,
+  type Credentials,
+} from './store.ts'
+
+/** All services the plugin knows. */
+export type ServiceName = 'trae' | 'workbuddy'
+export const SERVICES: readonly ServiceName[] = ['trae', 'workbuddy'] as const
+
+/** Client-facing per-service view. */
+export interface ServiceSnapshot {
+  service: ServiceName
+  /** Whether credentials are configured at all. */
+  configured: boolean
+  /** null = not probed yet (or not configured). */
+  authOk: boolean | null
+  checkedIn: boolean | null
+  /** Whether the daily campaign is enabled upstream (TRAE reports this). */
+  checkinEnabled: boolean | null
+  /** Numeric balance when the upstream payload carries a recognizable one. */
+  points: number | null
+  /** Raw upstream data for the panel's fallback display. */
+  pointsRaw?: unknown
+  /** Local date of the last successful claim. */
+  lastCheckin: string | null
+  /** Stable error kind of the last probe/claim, when one stands. */
+  error?: 'auth' | 'network' | 'protocol' | 'business'
+  /** Human-readable error message of the last probe/claim. */
+  errorMessage?: string
+}
+
+/** Full client-facing state. */
+export interface Snapshot {
+  trae: ServiceSnapshot
+  workbuddy: ServiceSnapshot
+}
+
+/** Upstream API seams (tests swap these). */
+export interface ApiAdapters {
+  trae: {
+    status: typeof trae.traeStatus
+    claim: typeof trae.traeClaim
+  }
+  workbuddy: {
+    status: typeof workbuddy.workbuddyStatus
+    claim: typeof workbuddy.workbuddyClaim
+    resource: typeof workbuddy.workbuddyResource
+  }
+}
+
+/** Default adapters over the real API clients. */
+export function defaultApis(): ApiAdapters {
+  return {
+    trae: { status: trae.traeStatus, claim: trae.traeClaim },
+    workbuddy: {
+      status: workbuddy.workbuddyStatus,
+      claim: workbuddy.workbuddyClaim,
+      resource: workbuddy.workbuddyResource,
+    },
+  }
+}
+
+const SNAPSHOT_TTL_MS = 30_000
+
+/** Per-service runtime view (credentials + last probe + last error). */
+interface RuntimeService {
+  credentials: Credentials['trae'] & Credentials['workbuddy']
+  lastCheckin: string | null
+  authOk: boolean | null
+  checkedIn: boolean | null
+  checkinEnabled: boolean | null
+  points: number | null
+  pointsRaw?: unknown
+  error?: ServiceSnapshot['error']
+  errorMessage?: string
+  probedAt: number
+}
+
+function emptyRuntime(credentials: Credentials['trae'] & Credentials['workbuddy'], lastCheckin: string | null): RuntimeService {
+  return {
+    credentials,
+    lastCheckin,
+    authOk: null,
+    checkedIn: null,
+    checkinEnabled: null,
+    points: null,
+    probedAt: 0,
+  }
+}
+
+export class CheckinOrchestrator {
+  private readonly apis: ApiAdapters
+  private readonly runtime: Record<ServiceName, RuntimeService>
+  private readonly refreshing: Record<ServiceName, Promise<void> | undefined> = { trae: undefined, workbuddy: undefined }
+
+  constructor(apis: ApiAdapters = defaultApis()) {
+    this.apis = apis
+    this.runtime = {
+      trae: emptyRuntime(undefined, null),
+      workbuddy: emptyRuntime(undefined, null),
+    }
+  }
+
+  /** (Re)load credentials and state from disk. */
+  async reload(): Promise<void> {
+    const [credentials, state] = [await readCredentials(), await readState()]
+    this.runtime.trae = emptyRuntime(credentials.trae, state.trae?.lastCheckin ?? null)
+    this.runtime.workbuddy = emptyRuntime(credentials.workbuddy, state.workbuddy?.lastCheckin ?? null)
+  }
+
+  /** Merge a credentials patch (per service) and persist it. */
+  async setCredentials(patch: {
+    trae?: { token?: string; deviceId?: string }
+    workbuddy?: { token?: string; userId?: string }
+  }): Promise<void> {
+    const current = await readCredentials()
+    if (patch.trae) {
+      const token = patch.trae.token ?? current.trae?.token ?? ''
+      const deviceId = patch.trae.deviceId ?? current.trae?.deviceId
+      if (token) current.trae = deviceId ? { token, deviceId } : { token }
+      else delete current.trae
+    }
+    if (patch.workbuddy) {
+      const token = patch.workbuddy.token ?? current.workbuddy?.token ?? ''
+      const userId = patch.workbuddy.userId ?? current.workbuddy?.userId
+      if (token) current.workbuddy = userId ? { token, userId } : { token }
+      else delete current.workbuddy
+    }
+    await writeCredentials(current)
+    await this.reload()
+  }
+
+  /** Current client-facing snapshot (probes are cached for SNAPSHOT_TTL_MS). */
+  async snapshot(force = false): Promise<Snapshot> {
+    await Promise.all(SERVICES.map((service) => this.probe(service, force)))
+    return { trae: this.toSnapshot('trae'), workbuddy: this.toSnapshot('workbuddy') }
+  }
+
+  /** Claim today's reward for one service; records the date on success. */
+  async checkin(service: ServiceName): Promise<void> {
+    const runtime = this.runtime[service]
+    if (!runtime.credentials?.token) throw new ApiError('auth', `${service} is not configured`)
+    if (service === 'trae') {
+      await this.apis.trae.claim(runtime.credentials.token, runtime.credentials.deviceId ?? '')
+    } else {
+      await this.apis.workbuddy.claim(runtime.credentials)
+    }
+    runtime.checkedIn = true
+    runtime.lastCheckin = todayLocal()
+    runtime.error = undefined
+    runtime.errorMessage = undefined
+    await this.persistState(service)
+  }
+
+  /**
+   * Startup catch-up: for every configured service, probe; claim when the
+   * upstream reports enabled-and-not-checked-in. Errors are recorded on the
+   * runtime (surfaced by the panel) and never propagate.
+   */
+  async ensureToday(): Promise<void> {
+    await Promise.all(SERVICES.map((service) => this.ensureTodayOne(service)))
+  }
+
+  private async ensureTodayOne(service: ServiceName): Promise<void> {
+    if (this.refreshing[service]) return this.refreshing[service]
+    const task = (async () => {
+      try {
+        await this.probe(service, true)
+        const runtime = this.runtime[service]
+        if (!runtime.credentials?.token) return
+        if (runtime.checkinEnabled === false) return
+        if (runtime.checkedIn) return
+        await this.checkin(service)
+        await this.probe(service, true)
+      } catch {
+        // ensureToday never throws; the panel shows the recorded error.
+      } finally {
+        this.refreshing[service] = undefined
+      }
+    })()
+    this.refreshing[service] = task
+    return task
+  }
+
+  private async probe(service: ServiceName, force: boolean): Promise<void> {
+    const runtime = this.runtime[service]
+    if (!runtime.credentials?.token) return
+    const fresh = Date.now() - runtime.probedAt < SNAPSHOT_TTL_MS
+    if (fresh && !force) return
+    // A claim that already succeeded today is authoritative even when a
+    // follow-up status probe still reports unchecked (upstream lag).
+    const claimedToday = runtime.lastCheckin === todayLocal()
+    try {
+      if (service === 'trae') {
+        const status = await this.apis.trae.status(runtime.credentials.token, runtime.credentials.deviceId ?? '')
+        runtime.authOk = true
+        runtime.checkinEnabled = status.enable
+        runtime.checkedIn = status.checkedIn || claimedToday
+        runtime.points = status.credits ?? null
+      } else {
+        const status = await this.apis.workbuddy.status(runtime.credentials)
+        runtime.authOk = true
+        runtime.checkedIn = status.checkedIn || claimedToday
+        runtime.points = status.points ?? null
+        try {
+          runtime.pointsRaw = await this.apis.workbuddy.resource(runtime.credentials)
+        } catch {
+          // Resource query is best-effort; status remains authoritative.
+        }
+      }
+      runtime.error = undefined
+      runtime.errorMessage = undefined
+    } catch (cause) {
+      const apiError = cause instanceof ApiError ? cause : undefined
+      runtime.authOk = apiError?.kind === 'auth' ? false : runtime.authOk
+      runtime.error = apiError?.kind ?? 'network'
+      runtime.errorMessage = cause instanceof Error ? cause.message : String(cause)
+    } finally {
+      runtime.probedAt = Date.now()
+    }
+  }
+
+  private toSnapshot(service: ServiceName): ServiceSnapshot {
+    const runtime = this.runtime[service]
+    return {
+      service,
+      configured: Boolean(runtime.credentials?.token),
+      authOk: runtime.authOk,
+      checkedIn: runtime.checkedIn,
+      checkinEnabled: runtime.checkinEnabled,
+      points: runtime.points,
+      pointsRaw: runtime.pointsRaw,
+      lastCheckin: runtime.lastCheckin,
+      error: runtime.error,
+      errorMessage: runtime.errorMessage,
+    }
+  }
+
+  private async persistState(service: ServiceName): Promise<void> {
+    const state = await readState()
+    state[service] = { lastCheckin: this.runtime[service].lastCheckin ?? undefined }
+    await writeState(state)
+  }
+}
