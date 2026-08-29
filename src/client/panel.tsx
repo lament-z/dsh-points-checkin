@@ -184,25 +184,16 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   const [form, setForm] = useState<SettingsForm>({ traeToken: '', traeDevice: '', wbToken: '', wbUser: '' })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
   const [cardPos, setCardPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null)
 
   useEffect(() => ensureStyles(), [])
 
-  // Anchor the card to the trigger: open to the right of the button (or to
-  // the left when that would leave the viewport), top aligned with it and
-  // clamped so the card never leaves the screen.
+  // Center the card in the viewport, clamped so it never leaves the screen.
   const updateCardPos = useCallback(() => {
-    const el = triggerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
     const width = 340
-    let left = rect.right + 10
-    if (left + width > window.innerWidth - 8) {
-      left = Math.max(8, rect.left - width - 10)
-    }
-    const top = Math.max(8, Math.min(rect.top - 6, window.innerHeight - 120))
-    setCardPos({ left, top, maxHeight: window.innerHeight - top - 12 })
+    const left = Math.max(8, Math.round((window.innerWidth - width) / 2))
+    const top = Math.max(16, Math.round((window.innerHeight - 420) / 2))
+    setCardPos({ left, top, maxHeight: window.innerHeight - top * 2 })
   }, [])
 
   const toggleOpen = useCallback(() => {
@@ -284,7 +275,6 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   const trigger = wide
     ? (
         <button
-          ref={triggerRef}
           type="button"
           className="dshpc-action dshpc-wide"
           onClick={toggleOpen}
@@ -299,7 +289,6 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
       )
     : (
         <button
-          ref={triggerRef}
           type="button"
           className="dshpc-action dshpc-rail"
           onClick={toggleOpen}
