@@ -12,6 +12,10 @@ DSH 插件：在 DSH 侧边栏里完成 WorkBuddy 和 TRAE 的积分查看与每
 ## 安装
 
 ```sh
+# 从 GitHub 安装（无需 clone，lib 预构建产物已入库）
+dsh plugin --profile web add github:lament-z/dsh-points-checkin
+
+# 或从本地目录安装
 dsh plugin --profile web add link:<本目录>
 ```
 
