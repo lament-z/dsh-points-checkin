@@ -7,6 +7,14 @@
 /** Ports the host bridge may be listening on, in probe order. */
 const PORT_CANDIDATES = [27182, 27183, 27184, 27185, 27186, 27187, 27188, 27189, 27190, 27191]
 
+/**
+ * Same-origin gateway prefix. When the panel is served through the public
+ * gateway (dsh-bridge-gateway), host APIs are reverse-proxied under this path
+ * so the browser can reach them over HTTPS without mixed-content/loopback
+ * restrictions. Probed before the raw localhost ports.
+ */
+const GATEWAY_PREFIX = '/points-checkin'
+
 const PROBE_TIMEOUT_MS = 800
 const REQUEST_TIMEOUT_MS = 15_000
 
@@ -43,10 +51,30 @@ export class BridgeUnreachableError extends Error {
   }
 }
 
-let cachedPort: number | null = null
-let probing: Promise<number | null> | null = null
+/** Resolved bridge transport for this page session. */
+type BridgeTarget = { mode: 'gateway' } | { mode: 'localhost'; port: number }
 
-async function probeOnce(): Promise<number | null> {
+let cachedTarget: BridgeTarget | null = null
+let probing: Promise<BridgeTarget | null> | null = null
+
+/** Probe the same-origin gateway proxy path (reverse-proxied host bridge). */
+async function probeGateway(): Promise<boolean> {
+  try {
+    const res = await fetch(`${GATEWAY_PREFIX}/ping`, {
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    })
+    if (res.ok) {
+      const body = (await res.json()) as { ok?: boolean; plugin?: string }
+      return body.ok === true && body.plugin === 'points-checkin'
+    }
+  } catch {
+    // Not behind the gateway; fall through to the localhost probe.
+  }
+  return false
+}
+
+async function probeOnce(): Promise<BridgeTarget | null> {
+  if (await probeGateway()) return { mode: 'gateway' }
   for (const port of PORT_CANDIDATES) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
@@ -54,7 +82,7 @@ async function probeOnce(): Promise<number | null> {
       const res = await fetch(`http://127.0.0.1:${port}/ping`, { signal: controller.signal })
       if (res.ok) {
         const body = (await res.json()) as { ok?: boolean; plugin?: string }
-        if (body.ok && body.plugin === 'points-checkin') return port
+        if (body.ok && body.plugin === 'points-checkin') return { mode: 'localhost', port }
       }
     } catch {
       // Try the next candidate.
@@ -69,7 +97,7 @@ async function probeOnce(): Promise<number | null> {
 const PROBE_ROUNDS = 3
 const PROBE_ROUND_DELAY_MS = 700
 
-async function probe(): Promise<number | null> {
+async function probe(): Promise<BridgeTarget | null> {
   for (let round = 0; round < PROBE_ROUNDS; round += 1) {
     if (round > 0) await new Promise((resolve) => setTimeout(resolve, PROBE_ROUND_DELAY_MS))
     const found = await probeOnce()
@@ -78,9 +106,9 @@ async function probe(): Promise<number | null> {
   return null
 }
 
-/** Resolve the bridge port, probing once per page session. */
-export async function bridgePort(): Promise<number | null> {
-  if (cachedPort !== null) return cachedPort
+/** Resolve the bridge transport, probing once per page session. */
+export async function bridgeTarget(): Promise<BridgeTarget | null> {
+  if (cachedTarget !== null) return cachedTarget
   if (!probing) {
     probing = probe().finally(() => {
       probing = null
@@ -88,22 +116,23 @@ export async function bridgePort(): Promise<number | null> {
   }
   const found = await probing
   if (found === null) return null
-  cachedPort = found
+  cachedTarget = found
   return found
 }
 
-/** Forget the cached port (call after connection failures). */
-export function resetBridgePort(): void {
-  cachedPort = null
+/** Forget the resolved transport (call after connection failures). */
+export function resetBridgeTarget(): void {
+  cachedTarget = null
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const port = await bridgePort()
-  if (port === null) throw new BridgeUnreachableError()
+  const target = await bridgeTarget()
+  if (target === null) throw new BridgeUnreachableError()
+  const url = target.mode === 'gateway' ? `${GATEWAY_PREFIX}${path}` : `http://127.0.0.1:${target.port}${path}`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
-    const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+    const res = await fetch(url, {
       ...init,
       signal: controller.signal,
     })
@@ -117,7 +146,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   } catch (cause) {
     if (cause instanceof TypeError) {
       // A network-level failure usually means the host went away: reprobe.
-      resetBridgePort()
+      resetBridgeTarget()
     }
     throw cause
   } finally {

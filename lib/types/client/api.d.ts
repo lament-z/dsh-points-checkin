@@ -29,10 +29,17 @@ export interface PluginSettingsView {
 export declare class BridgeUnreachableError extends Error {
     constructor();
 }
-/** Resolve the bridge port, probing once per page session. */
-export declare function bridgePort(): Promise<number | null>;
-/** Forget the cached port (call after connection failures). */
-export declare function resetBridgePort(): void;
+/** Resolved bridge transport for this page session. */
+type BridgeTarget = {
+    mode: 'gateway';
+} | {
+    mode: 'localhost';
+    port: number;
+};
+/** Resolve the bridge transport, probing once per page session. */
+export declare function bridgeTarget(): Promise<BridgeTarget | null>;
+/** Forget the resolved transport (call after connection failures). */
+export declare function resetBridgeTarget(): void;
 /** Fetch the full snapshot (pass refresh to force upstream probes). */
 export declare function fetchState(refresh?: boolean): Promise<Snapshot>;
 /** Claim one service's daily reward, then the refreshed snapshot. */
@@ -43,3 +50,4 @@ export declare function refreshAll(): Promise<Snapshot>;
 export declare function fetchSettings(): Promise<PluginSettingsView>;
 /** Save the daily check-in schedule. */
 export declare function saveCheckinTime(checkinTime: string): Promise<PluginSettingsView>;
+export {};
