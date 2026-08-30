@@ -4,4 +4,4 @@
 # `dsh plugin --profile web add link:<repo>/plugins/dsh-points-checkin`.
 - insert:
     - id: points-checkin
-      name: '@lament-z/dsh-points-checkin'
+      name: '@lament_z/dsh-points-checkin'
