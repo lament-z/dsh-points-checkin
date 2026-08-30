@@ -12,6 +12,9 @@ The upstream APIs (`api.trae.cn`, the WorkBuddy meter service) send no CORS head
 ## Install
 
 ```sh
+# Preferred: from npm
+dsh plugin --profile web add @lament_z/dsh-points-checkin
+
 # From GitHub (no clone needed; prebuilt lib is committed)
 dsh plugin --profile web add github:lament-z/dsh-points-checkin
 
