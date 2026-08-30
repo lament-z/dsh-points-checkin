@@ -12,7 +12,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { ApiError } from './errors.ts'
 import { CheckinOrchestrator } from './checkin.ts'
-import { readCredentials, type Credentials } from './store.ts'
+import { readCredentials, readSettings, writeSettings, type Credentials } from './store.ts'
 
 /** Ports probed, in order, by the browser half. */
 export const PORT_CANDIDATES = [27182, 27183, 27184, 27185, 27186, 27187, 27188, 27189, 27190, 27191]
@@ -182,6 +182,20 @@ async function handle(
         workbuddy?: Partial<Credentials['workbuddy']>
       })
       sendJson(res, 200, await orchestrator.snapshot(true))
+      return
+    }
+    if (method === 'GET' && url.pathname === '/settings') {
+      sendJson(res, 200, await readSettings())
+      return
+    }
+    if (method === 'POST' && url.pathname === '/settings') {
+      const body = await readBody(req)
+      const time = (body as { checkinTime?: unknown }).checkinTime
+      if (typeof time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+        throw new ApiError('protocol', 'checkinTime must be HH:mm (00:00-23:59)')
+      }
+      await writeSettings({ checkinTime: time })
+      sendJson(res, 200, await readSettings())
       return
     }
     if (method === 'POST' && url.pathname === '/refresh') {

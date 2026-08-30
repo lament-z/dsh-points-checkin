@@ -36,6 +36,15 @@ describe('store', () => {
     expect(existsSync(path.join(dir, 'credentials.json.tmp'))).toBe(false)
   })
 
+  it('round-trips settings and rejects malformed times', async () => {
+    const { readSettings, writeSettings, DEFAULT_SETTINGS } = await import('./store.ts')
+    expect(await readSettings()).toEqual(DEFAULT_SETTINGS)
+    await writeSettings({ checkinTime: '08:30' })
+    expect(await readSettings()).toEqual({ checkinTime: '08:30' })
+    await writeSettings({ checkinTime: 'bad' })
+    expect(await readSettings()).toEqual(DEFAULT_SETTINGS)
+  })
+
   it('formats the local date as YYYY-MM-DD', () => {
     expect(todayLocal()).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })

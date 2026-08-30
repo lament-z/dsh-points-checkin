@@ -31,14 +31,8 @@ export interface Snapshot {
   workbuddy: ServiceSnapshot
 }
 
-export interface CredentialsView {
-  trae: { configured: boolean; token: string; deviceId: string }
-  workbuddy: { configured: boolean; token: string; userId: string }
-}
-
-export interface CredentialsPatch {
-  trae?: { token?: string; deviceId?: string }
-  workbuddy?: { token?: string; userId?: string }
+export interface PluginSettingsView {
+  checkinTime: string
 }
 
 /** Unreachable bridge (no candidate port answered). */
@@ -146,16 +140,16 @@ export function refreshAll(): Promise<Snapshot> {
   return call<Snapshot>('/refresh', { method: 'POST' })
 }
 
-/** Load the stored credentials (values included; localhost-only bridge). */
-export function fetchCredentials(): Promise<CredentialsView> {
-  return call<CredentialsView>('/credentials')
+/** Load the plugin settings (the daily check-in schedule). */
+export function fetchSettings(): Promise<PluginSettingsView> {
+  return call<PluginSettingsView>('/settings')
 }
 
-/** Save a credentials patch, returning the refreshed snapshot. */
-export function saveCredentials(patch: CredentialsPatch): Promise<Snapshot> {
-  return call<Snapshot>('/credentials', {
+/** Save the daily check-in schedule. */
+export function saveCheckinTime(checkinTime: string): Promise<PluginSettingsView> {
+  return call<PluginSettingsView>('/settings', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch),
+    body: JSON.stringify({ checkinTime }),
   })
 }

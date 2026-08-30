@@ -1,6 +1,6 @@
 # dsh-points-checkin
 
-DSH plugin: points and daily check-in for WorkBuddy and TRAE, inside the DSH sidebar. A footer action beside Settings opens an expanding card showing each service's points, today's check-in state, and a one-click claim button; token setup lives in the same card. The host half runs a startup catch-up pass, so anything not yet checked in today is claimed when DSH boots.
+DSH plugin: points and daily check-in for WorkBuddy and TRAE, inside the DSH sidebar. A footer action beside Settings opens an expanding card showing each service's points, today's check-in state, and a one-click claim button. The card's settings page shows where each credential came from (fetched automatically - nothing to paste), any fetch error with its upstream reason, and the daily automatic check-in time. The host half runs a startup catch-up pass and a daily scheduler at the configured time, so anything not yet checked in is claimed without manual action.
 
 The upstream APIs (`api.trae.cn`, the WorkBuddy meter service) send no CORS headers, so the browser half never calls them directly. The host half runs a small localhost bridge on 127.0.0.1 (ports 27182-27191) that the panel discovers and talks to; tokens are stored by the host under `~/.dsh-points-checkin/credentials.json` (mode 0600, never logged).
 
@@ -21,20 +21,20 @@ dsh plugin --profile web add link:<this directory>
 
 Then restart `dsh web` and reload the page. The entry appears at the sidebar foot, beside Settings; when the sidebar is collapsed it renders as a rail icon.
 
-## Getting the tokens
+## Credentials (automatic)
 
-The plugin stores tokens only; it does not implement third-party login.
+No tokens to paste. Both services reuse their desktop app's sign-in state and refresh themselves when they expire:
 
-- **WorkBuddy** (Bearer token): open `https://www.codebuddy.cn/profile/plan`, sign in with the same Tencent account as the WorkBuddy client, open DevTools > Network, and copy the `Authorization: Bearer <token>` header from any `/billing/meter/...` request (plus `X-User-Id` when present).
-- **TRAE** (Cloud-IDE-JWT token): open `https://www.trae.cn`, sign in, open DevTools > Network, find a request to `api.trae.cn`, and copy the `authorization: Cloud-IDE-JWT <token>` header value.
+- **WorkBuddy**: reads the WorkBuddy desktop app's plaintext auth document (same source as dsh-workbuddy-connect); expired tokens refresh through the official endpoint.
+- **TRAE**: reads the desktop-captured ideToken (`<appDir>/trae-auth.json` or `~/.dsh/.trae-auth.json`, same path as dsh-trae-connect); expired tokens refresh through the OAuth ExchangeToken endpoint.
 
-Paste both into the card's Settings section and save; the panel probes immediately and shows each service's state. When a token expires the card flags it and the value needs to be re-copied.
+The card's Settings page shows each service's credential source and the exact upstream error whenever a fetch fails. If neither source is available, sign in to the corresponding desktop app and reload.
 
 ## Notes
 
 - Host half: check-in orchestrator (status, claim, startup catch-up), token store, localhost bridge; all upstream API details are quarantined in `src/host/trae.ts` and `src/host/workbuddy.ts`.
 - Client half: sidebar footer action + expanding card; every request goes through the host bridge (port probing with retry, CORS plus Private-Network preflight handled host-side). Non-localhost origins are rejected by the bridge.
-- WorkBuddy's points figure is parsed heuristically from the meter payload (the exact balance field is still unconfirmed); when parsing fails the card shows a placeholder and the raw data stays available in `/state`.
+- WorkBuddy points are the official sum of package CycleCapacityRemain values; TRAE points are the credits ledger's total minus consumed (the dashboard's own figure).
 - No emoji in code, comments, docs, or commit messages.
 
 ## License

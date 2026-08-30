@@ -108,6 +108,27 @@ describe('bridge', () => {
     expect(apis.workbuddy.claim).toHaveBeenCalled()
   })
 
+  it('round-trips the check-in schedule via /settings', async () => {
+    const { port } = await startWith(new CheckinOrchestrator(fakeApis()))
+    const get = await fetch(`http://127.0.0.1:${port}/settings`)
+    expect(get.status).toBe(200)
+    const initial = (await get.json()) as { checkinTime: string }
+    expect(initial.checkinTime).toMatch(/^\d{2}:\d{2}$/)
+    const bad = await fetch(`http://127.0.0.1:${port}/settings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ checkinTime: '25:99' }),
+    })
+    expect(bad.status).toBe(500)
+    const save = await fetch(`http://127.0.0.1:${port}/settings`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ checkinTime: '08:15' }),
+    })
+    expect(save.status).toBe(200)
+    expect(await save.json()).toEqual({ checkinTime: '08:15' })
+  })
+
   it('returns 404 for unknown routes', async () => {
     const { port } = await startWith(new CheckinOrchestrator(fakeApis()))
     const res = await fetch(`http://127.0.0.1:${port}/nope`)

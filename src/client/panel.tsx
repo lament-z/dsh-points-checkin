@@ -11,10 +11,9 @@ import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   BridgeUnreachableError,
   checkin as bridgeCheckin,
-  fetchCredentials,
+  fetchSettings,
   fetchState,
-  saveCredentials,
-  type CredentialsView,
+  saveCheckinTime,
   type ServiceSnapshot,
   type Snapshot,
 } from './api.ts'
@@ -99,82 +98,66 @@ function ServiceCard(
   )
 }
 
-interface SettingsForm {
-  traeToken: string
-  traeDevice: string
-  wbToken: string
-  wbUser: string
+/** One credential-source line in the settings block. */
+function CredentialLine(
+  props: { service: ServiceSnapshot; name: string } & PropsLocale<'points-checkin'>,
+): React.ReactElement {
+  const { service, name, t } = props
+  const source = service.credentialSource
+  const sourceLabel = source ? t(`cred.${source}` as Parameters<typeof t>[0]) : t('cred.unavailable')
+  return (
+    <div className="dshpc-cred-line">
+      <span className={`dshpc-dot${service.error ? ' bad' : service.authOk ? ' ok' : ''}`} />
+      <span className="dshpc-service-name">{name}</span>
+      <span className="dshpc-status">{sourceLabel}</span>
+      {service.errorMessage && (
+        <div className="dshpc-error">{t('settings.credError')}: {service.errorMessage}</div>
+      )}
+    </div>
+  )
 }
 
 function SettingsSection(
   props: {
     open: boolean
-    form: SettingsForm
+    snapshot: Snapshot | null
+    time: string
     saving: boolean
     saved: boolean
-    workbuddyAuto: boolean
-    onChange: (patch: Partial<SettingsForm>) => void
+    onTimeChange: (time: string) => void
     onSave: () => void
   } & PropsLocale<'points-checkin'>,
 ): React.ReactElement | null {
-  const { open, form, saving, saved, workbuddyAuto, onChange, onSave, t } = props
+  const { open, snapshot, time, saving, saved, onTimeChange, onSave, t } = props
   if (!open) return null
   return (
     <div className="dshpc-settings">
+      <p className="dshpc-hint">{t('settings.credTitle')}</p>
+      {snapshot ? (
+        <>
+          <CredentialLine service={snapshot.trae} name={t('service.trae')} t={t} />
+          <CredentialLine service={snapshot.workbuddy} name={t('service.workbuddy')} t={t} />
+        </>
+      ) : (
+        <p className="dshpc-muted">{t('panel.loading')}</p>
+      )}
       <div className="dshpc-field">
-        <label htmlFor="dshpc-trae-token">{t('settings.traeToken')}</label>
+        <label htmlFor="dshpc-checkin-time">{t('settings.schedule')}</label>
         <input
-          id="dshpc-trae-token"
+          id="dshpc-checkin-time"
           className="dshpc-input"
-          type="password"
-          autoComplete="off"
-          placeholder={t('settings.placeholder')}
-          value={form.traeToken}
-          onChange={(event) => onChange({ traeToken: event.target.value })}
+          type="time"
+          value={time}
+          onChange={(event) => onTimeChange(event.target.value)}
         />
-      </div>
-      <div className="dshpc-field">
-        <label htmlFor="dshpc-trae-device">{t('settings.traeDevice')}</label>
-        <input
-          id="dshpc-trae-device"
-          className="dshpc-input"
-          type="text"
-          autoComplete="off"
-          value={form.traeDevice}
-          onChange={(event) => onChange({ traeDevice: event.target.value })}
-        />
-      </div>
-      <div className="dshpc-field">
-        <label htmlFor="dshpc-wb-token">{t('settings.wbToken')}</label>
-        <input
-          id="dshpc-wb-token"
-          className="dshpc-input"
-          type="password"
-          autoComplete="off"
-          placeholder={t('settings.placeholder')}
-          value={form.wbToken}
-          onChange={(event) => onChange({ wbToken: event.target.value })}
-        />
-        {workbuddyAuto && <p className="dshpc-hint">{t('settings.wbAuto')}</p>}
-      </div>
-      <div className="dshpc-field">
-        <label htmlFor="dshpc-wb-user">{t('settings.wbUser')}</label>
-        <input
-          id="dshpc-wb-user"
-          className="dshpc-input"
-          type="text"
-          autoComplete="off"
-          value={form.wbUser}
-          onChange={(event) => onChange({ wbUser: event.target.value })}
-        />
+        <p className="dshpc-hint">{t('settings.scheduleHint')}</p>
       </div>
       <div className="dshpc-row">
-        <button type="button" className="dshpc-button" disabled={saving} onClick={onSave}>
+        <button type="button" className="dshpc-button" disabled={saving || !time} onClick={onSave}>
           {saving ? t('settings.saving') : t('settings.save')}
         </button>
         {saved && <span className="dshpc-muted">{t('settings.saved')}</span>}
       </div>
-      <p className="dshpc-hint">{t('settings.howTo')}</p>
     </div>
   )
 }
@@ -187,7 +170,7 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   const [unreachable, setUnreachable] = useState(false)
   const [busyService, setBusyService] = useState<'trae' | 'workbuddy' | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [form, setForm] = useState<SettingsForm>({ traeToken: '', traeDevice: '', wbToken: '', wbUser: '' })
+  const [checkinTime, setCheckinTime] = useState('09:00')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [cardPos, setCardPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null)
@@ -229,15 +212,8 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
   useEffect(() => {
     if (!open) return
     void loadState(true)
-    void fetchCredentials()
-      .then((creds: CredentialsView) => {
-        setForm({
-          traeToken: creds.trae.token,
-          traeDevice: creds.trae.deviceId,
-          wbToken: creds.workbuddy.token,
-          wbUser: creds.workbuddy.userId,
-        })
-      })
+    void fetchSettings()
+      .then((settings) => setCheckinTime(settings.checkinTime))
       .catch(() => {})
     const timer = setInterval(() => {
       void loadState(false)
@@ -262,19 +238,15 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
     setSaving(true)
     setSaved(false)
     try {
-      const next = await saveCredentials({
-        trae: { token: form.traeToken, deviceId: form.traeDevice || undefined },
-        workbuddy: { token: form.wbToken, userId: form.wbUser || undefined },
-      })
-      setSnapshot(next)
-      setUnreachable(false)
+      const settings = await saveCheckinTime(checkinTime)
+      setCheckinTime(settings.checkinTime)
       setSaved(true)
     } catch {
-      // Keep the form; the next refresh will surface the error kind.
+      // The next save attempt retries; invalid values are rejected host-side.
     } finally {
       setSaving(false)
     }
-  }, [form])
+  }, [checkinTime])
 
   const label = t('action.label')
   const dotClassSum = snapshot ? dotClass(snapshot.trae) || dotClass(snapshot.workbuddy) : ''
@@ -346,11 +318,11 @@ export function PointsPanel(props: PointsPanelProps): React.ReactElement {
             </div>
             <SettingsSection
               open={settingsOpen}
-              form={form}
+              snapshot={snapshot}
+              time={checkinTime}
               saving={saving}
               saved={saved}
-              workbuddyAuto={snapshot?.workbuddy.credentialSource === 'desktop' || snapshot?.workbuddy.credentialSource === 'plugin-copy'}
-              onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+              onTimeChange={setCheckinTime}
               onSave={() => void doSave()}
               t={t}
             />

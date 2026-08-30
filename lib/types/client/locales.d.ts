@@ -27,16 +27,20 @@ export declare const zh: {
     'lastCheckin.label': string;
     'settings.title': string;
     'settings.expand': string;
-    'settings.traeToken': string;
-    'settings.traeDevice': string;
-    'settings.wbToken': string;
-    'settings.wbAuto': string;
-    'settings.wbUser': string;
+    'settings.schedule': string;
+    'settings.scheduleHint': string;
     'settings.save': string;
     'settings.saving': string;
     'settings.saved': string;
-    'settings.placeholder': string;
-    'settings.howTo': string;
+    'settings.credTitle': string;
+    'settings.credError': string;
+    'cred.trae-desktop': string;
+    'cred.dsh': string;
+    'cred.points-checkin': string;
+    'cred.desktop': string;
+    'cred.plugin-copy': string;
+    'cred.manual': string;
+    'cred.unavailable': string;
     'error.prefix': string;
 };
 /** The points-checkin namespace key union. */

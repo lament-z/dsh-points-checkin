@@ -22,27 +22,8 @@ export interface Snapshot {
     trae: ServiceSnapshot;
     workbuddy: ServiceSnapshot;
 }
-export interface CredentialsView {
-    trae: {
-        configured: boolean;
-        token: string;
-        deviceId: string;
-    };
-    workbuddy: {
-        configured: boolean;
-        token: string;
-        userId: string;
-    };
-}
-export interface CredentialsPatch {
-    trae?: {
-        token?: string;
-        deviceId?: string;
-    };
-    workbuddy?: {
-        token?: string;
-        userId?: string;
-    };
+export interface PluginSettingsView {
+    checkinTime: string;
 }
 /** Unreachable bridge (no candidate port answered). */
 export declare class BridgeUnreachableError extends Error {
@@ -58,7 +39,7 @@ export declare function fetchState(refresh?: boolean): Promise<Snapshot>;
 export declare function checkin(service: 'trae' | 'workbuddy'): Promise<Snapshot>;
 /** Run the host-side startup catch-up immediately. */
 export declare function refreshAll(): Promise<Snapshot>;
-/** Load the stored credentials (values included; localhost-only bridge). */
-export declare function fetchCredentials(): Promise<CredentialsView>;
-/** Save a credentials patch, returning the refreshed snapshot. */
-export declare function saveCredentials(patch: CredentialsPatch): Promise<Snapshot>;
+/** Load the plugin settings (the daily check-in schedule). */
+export declare function fetchSettings(): Promise<PluginSettingsView>;
+/** Save the daily check-in schedule. */
+export declare function saveCheckinTime(checkinTime: string): Promise<PluginSettingsView>;

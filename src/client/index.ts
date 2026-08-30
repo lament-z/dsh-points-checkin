@@ -61,4 +61,4 @@ export function apply(ctx: ClientContext): void {
 
 export type { PointsPanelProps } from './panel.tsx'
 export type { PointsKey } from './locales.ts'
-export type { Snapshot, ServiceSnapshot, CredentialsView } from './api.ts'
+export type { Snapshot, ServiceSnapshot } from './api.ts'

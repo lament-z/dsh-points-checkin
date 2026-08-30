@@ -42,3 +42,14 @@ export declare function readState(): Promise<CheckinState>;
 export declare function writeState(state: CheckinState): Promise<void>;
 /** Local calendar date (YYYY-MM-DD) for "checked in today" comparisons. */
 export declare function todayLocal(): string;
+/** Plugin-level settings (the panel's schedule configuration). */
+export interface PluginSettings {
+    /** Local time of day (HH:mm) for the scheduled automatic check-in. */
+    checkinTime: string;
+}
+/** Default settings; a fresh install checks in at 09:00 local time. */
+export declare const DEFAULT_SETTINGS: PluginSettings;
+/** Load plugin settings with defaults filled in. */
+export declare function readSettings(): Promise<PluginSettings>;
+/** Persist plugin settings atomically. */
+export declare function writeSettings(settings: PluginSettings): Promise<void>;

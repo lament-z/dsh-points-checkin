@@ -71,6 +71,9 @@ export function ensureStyles(): void {
 .dshpc-error { color: #d93025; margin-top: 6px; font-size: 12px; }
 .dshpc-muted { color: color-mix(in srgb, CanvasText 55%, Canvas); }
 .dshpc-settings { margin-top: 10px; border-top: 1px solid color-mix(in srgb, CanvasText 10%, transparent); padding-top: 10px; }
+.dshpc-cred-line { display: flex; align-items: center; gap: 8px; padding: 3px 0; position: relative; flex-wrap: wrap; }
+.dshpc-cred-line .dshpc-status { margin-left: auto; font-size: 12px; }
+.dshpc-cred-line .dshpc-error { width: 100%; margin-top: 0; word-break: break-all; }
 .dshpc-field { margin-top: 8px; }
 .dshpc-field label { display: block; font-size: 12px; margin-bottom: 3px; color: color-mix(in srgb, CanvasText 70%, Canvas); }
 .dshpc-input {

@@ -93,3 +93,27 @@ export function todayLocal(): string {
   const day = `${now.getDate()}`.padStart(2, '0')
   return `${now.getFullYear()}-${month}-${day}`
 }
+
+/** Plugin-level settings (the panel's schedule configuration). */
+export interface PluginSettings {
+  /** Local time of day (HH:mm) for the scheduled automatic check-in. */
+  checkinTime: string
+}
+
+/** Default settings; a fresh install checks in at 09:00 local time. */
+export const DEFAULT_SETTINGS: PluginSettings = { checkinTime: '09:00' }
+
+function normalizeTime(value: unknown): string {
+  return typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : DEFAULT_SETTINGS.checkinTime
+}
+
+/** Load plugin settings with defaults filled in. */
+export async function readSettings(): Promise<PluginSettings> {
+  const stored = await readJson<Partial<PluginSettings>>('settings.json')
+  return { checkinTime: normalizeTime(stored?.checkinTime) }
+}
+
+/** Persist plugin settings atomically. */
+export async function writeSettings(settings: PluginSettings): Promise<void> {
+  await writeJson('settings.json', settings)
+}
