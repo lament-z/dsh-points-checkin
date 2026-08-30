@@ -20,12 +20,18 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
+function traeCredential() {
+  return { ideToken: 'tok', appId: '', clientId: '', userId: '', expiresAtMs: 0, device: { deviceId: 'dev' }, source: 'manual' as const }
+}
+
 function fakeApis(): ApiAdapters {
   return {
     trae: {
+      resolve: vi.fn(async () => traeCredential()),
       status: vi.fn(async () => ({ enable: true, checkedIn: false, credits: 7 })),
       entitlements: vi.fn(async () => ({ remaining: 7, totalAmount: 10, consumedAmount: 3 })),
       claim: vi.fn(async () => undefined),
+      refresh: vi.fn(async (c) => c),
     },
     workbuddy: {
       resolve: vi.fn(async () => ({ accessToken: 'wb', refreshToken: 'r', expiresAtMs: 0, uid: '', domain: '', source: 'manual' as const })),

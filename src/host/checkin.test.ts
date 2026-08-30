@@ -21,12 +21,18 @@ function fakeWorkbuddyCredential() {
   return { accessToken: 'wb', refreshToken: 'r', expiresAtMs: 0, uid: 'u1', domain: '', source: 'manual' as const }
 }
 
+function traeCredential() {
+  return { ideToken: 'tok', appId: '', clientId: '', userId: '', expiresAtMs: 0, device: { deviceId: 'dev' }, source: 'manual' as const }
+}
+
 function fakeApis(): ApiAdapters {
   return {
     trae: {
+      resolve: vi.fn(async () => traeCredential()),
       status: vi.fn(async () => ({ enable: true, checkedIn: false, credits: 120 })),
       entitlements: vi.fn(async () => ({ remaining: 3182.4, totalAmount: 10100, consumedAmount: 6917.6 })),
       claim: vi.fn(async () => undefined),
+      refresh: vi.fn(async (c) => c),
     },
     workbuddy: {
       resolve: vi.fn(async () => fakeWorkbuddyCredential()),
@@ -41,6 +47,7 @@ function fakeApis(): ApiAdapters {
 describe('CheckinOrchestrator', () => {
   it('reports unconfigured services', async () => {
     const apis = fakeApis()
+    ;(apis.trae.resolve as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
     ;(apis.workbuddy.resolve as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
     const orch = new CheckinOrchestrator(apis)
     const snap = await orch.snapshot(true)
@@ -67,7 +74,7 @@ describe('CheckinOrchestrator', () => {
     expect(snap.trae.points).toBe(3182.4)
     expect(snap.workbuddy.configured).toBe(true)
     expect(snap.workbuddy.points).toBe(3)
-    expect(apis.trae.status).toHaveBeenCalledWith('tok', '')
+    expect(apis.trae.status).toHaveBeenCalledWith(expect.objectContaining({ ideToken: 'tok' }))
     expect(apis.workbuddy.resolve).toHaveBeenCalledWith('wb')
   })
 
@@ -86,7 +93,7 @@ describe('CheckinOrchestrator', () => {
     await orch.setCredentials({ trae: { token: 'tok' } })
     await orch.checkin('trae')
     const snap = await orch.snapshot(true)
-    expect(apis.trae.claim).toHaveBeenCalledWith('tok', '')
+    expect(apis.trae.claim).toHaveBeenCalledWith(expect.objectContaining({ ideToken: 'tok' }))
     expect(snap.trae.checkedIn).toBe(true)
     expect(snap.trae.lastCheckin).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
@@ -131,11 +138,13 @@ describe('CheckinOrchestrator', () => {
     expect(snap.trae.error).toBe('auth')
   })
 
-  it('drops a service when the token field is cleared', async () => {
-    const orch = new CheckinOrchestrator(fakeApis())
+  it('drops a service when the token field is cleared and no file credential exists', async () => {
+    const apis = fakeApis()
+    ;(apis.trae.resolve as ReturnType<typeof vi.fn>).mockResolvedValue(undefined)
+    const orch = new CheckinOrchestrator(apis)
     await orch.setCredentials({ trae: { token: 'tok' } })
     await orch.setCredentials({ trae: { token: '' } })
-    const snap = await orch.snapshot()
+    const snap = await orch.snapshot(true)
     expect(snap.trae.configured).toBe(false)
   })
 })

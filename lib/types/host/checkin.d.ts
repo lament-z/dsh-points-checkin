@@ -1,4 +1,5 @@
 import * as trae from './trae.ts';
+import type { TraeCredential } from './trae.ts';
 import * as workbuddy from './workbuddy.ts';
 import type { WbCredential } from './workbuddy.ts';
 /** All services the plugin knows. */
@@ -25,7 +26,7 @@ export interface ServiceSnapshot {
     /** Human-readable error message of the last probe/claim. */
     errorMessage?: string;
     /** WorkBuddy only: where the credential came from (desktop file or manual). */
-    credentialSource?: 'desktop' | 'plugin-copy' | 'manual';
+    credentialSource?: 'desktop' | 'plugin-copy' | 'manual' | 'trae-desktop' | 'dsh' | 'points-checkin';
 }
 /** Full client-facing state. */
 export interface Snapshot {
@@ -35,9 +36,12 @@ export interface Snapshot {
 /** Upstream API seams (tests swap these). */
 export interface ApiAdapters {
     trae: {
+        /** Resolve the effective credential (manual token wins; else capture files). */
+        resolve: (manualToken?: string) => Promise<TraeCredential | undefined>;
         status: typeof trae.traeStatus;
         entitlements: typeof trae.traeEntitlements;
         claim: typeof trae.traeClaim;
+        refresh: typeof trae.traeRefresh;
     };
     workbuddy: {
         /** Resolve the effective credential (manual token wins; else desktop file + plugin copy). */
@@ -80,6 +84,8 @@ export declare class CheckinOrchestrator {
     ensureToday(): Promise<void>;
     private ensureTodayOne;
     private probe;
+    private probeTrae;
+    private probeTraeOnce;
     private probeWorkbuddy;
     private recordError;
     private toSnapshot;
