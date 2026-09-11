@@ -4,7 +4,11 @@ target: README.zh.md
 sections:
   - title
   - intro
+  - features
   - requirements
   - install
+  - credentials
+  - usage
   - notes
+  - troubleshooting
   - license
