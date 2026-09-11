@@ -4,7 +4,8 @@
  * Settings) that opens the expanding points card. The upstream APIs block
  * browser CORS, so this half only talks to the host bridge; see api.ts.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+// DSH-0.1.2-A1-25: dsh-client-runtime 包已删除，ClientContext 即 cordis Context。
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale) and its
 // LocaleNamespaceMap merge table.
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -12,6 +13,8 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the sidebar shell's SlotMap merge ('sidebar.footer.action').
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+// DSH-0.1.5-A1-14/A2-13: ctx.slots 的 Context 合并自 ui-renderer 的 client 入口。
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { PointsPanel } from './panel.tsx'
 import { en, zh, type PointsKey } from './locales.ts'
 

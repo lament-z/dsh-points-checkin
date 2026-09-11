@@ -4,7 +4,7 @@
  * Settings) that opens the expanding points card. The upstream APIs block
  * browser CORS, so this half only talks to the host bridge; see api.ts.
  */
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client';
+import type { Context as ClientContext } from '@deepseek-ai/cordis';
 import { type PointsKey } from './locales.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface LocaleNamespaceMap {
