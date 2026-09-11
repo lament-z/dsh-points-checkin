@@ -2,7 +2,7 @@
   "name": "@lament_z/dsh-points-checkin",
   "displayName": "DSH Points Checkin",
   "description": "面向 WorkBuddy 与 TRAE 的积分与每日签到插件：在侧边栏底部提供一键签到入口，展开式卡片清晰展示积分余额、签到状态与 Token 配置，支持每日一键签到并即时反馈积分变动。",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
