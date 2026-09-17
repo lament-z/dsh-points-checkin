@@ -6,5 +6,13 @@
  * check-in.
  */
 import type { Context } from '@deepseek-ai/cordis';
-/** Apply the host half. */
-export declare function apply(ctx: Context): void;
+/**
+ * Apply the host half.
+ *
+ * Awaited on purpose: `startPointsCheckin` only reaches `ctx.effect` after two
+ * awaits, and registering an effect on an already-disposed fiber rejects. The
+ * host installs a process-wide `unhandledRejection` handler that exits, so a
+ * floating promise here would take the whole dsh process down whenever the app
+ * boots and then tears down right away — e.g. `dsh web --help`.
+ */
+export declare function apply(ctx: Context): Promise<void>;
